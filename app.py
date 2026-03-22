@@ -107,6 +107,23 @@ html, body, [class*="css"] {{
     background-color: #fff;
     color: #c5276a;
 }}
+/* QR download custom style */
+.qr-download-btn > button {{
+    background-color: {HIGHLIGHT} !important;
+    color: {CARD_BG} !important;
+    font-weight: 600 !important;
+    border: none !important;
+    border-radius: 13px !important;
+    padding: .7em 1.8em !important;
+    font-size: 1.03em !important;
+    margin-top: 0.7em !important;
+    margin-bottom: 2.2em !important;
+}}
+.qr-download-btn > button:hover {{
+    background: #ffffff !important;
+    color: #c5276a !important;
+    border: 1px solid {HIGHLIGHT} !important;
+}}
 @media (max-width: 720px) {{
     .digital-card {{padding: 1.1rem 0.5rem !important; max-width:98vw;}}
     .digital-card .title {{font-size:1.25em;}}
@@ -119,7 +136,6 @@ html, body, [class*="css"] {{
 BASE_APP_URL = "https://lunasync.streamlit.app/"
 
 def get_card_url(base_url, name, title, email, linkedin, whatsapp, others):
-    # Boşlukları encode ederek parametre ekle
     params = (
         f"?name={quote(name or '')}"
         f"&title={quote(title or '')}"
@@ -195,11 +211,16 @@ if st.session_state.get("qr_image"):
         f'<p style="margin:0.8em 0 0.5em 0; color:{HIGHLIGHT}; font-weight:600;">Bağlantı: <a href="{st.session_state["qr_url"]}" style="color:{HIGHLIGHT};word-break:break-all;">{st.session_state["qr_url"]}</a></p>', 
         unsafe_allow_html=True
     )
-    st.download_button(
-        "QR Kodu İndir",
-        data=st.session_state.qr_image,
-        file_name="dijital_kartvizit_qr.png",
-        mime="image/png",
-        use_container_width=True,
-    )
+
+    with st.container():
+        st.markdown('<div class="qr-download-btn">', unsafe_allow_html=True)
+        st.download_button(
+            label="QR Kodu İndir",
+            data=st.session_state["qr_image"],
+            file_name="LunaSync_QR.png",
+            mime="image/png",
+            use_container_width=False,
+            key="qr_download_button"
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
