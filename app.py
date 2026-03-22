@@ -12,6 +12,13 @@ CARD_BG = "#2F2F2F"
 HIGHLIGHT = "#F8C8DC"
 WHITE = "#FFFFFF"
 
+HILAL_SVG = """
+<svg width="50" height="50" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="25" cy="25" r="20" fill="white"/>
+  <circle cx="33" cy="23" r="18" fill="{bg}"/>
+</svg>
+""".format(bg=CARD_BG)
+
 def make_card(name, title, email, linkedin, whatsapp, others):
     _name = name.strip() or "Ad Soyad"
     _title = title.strip() or "Unvanınız"
@@ -21,17 +28,25 @@ def make_card(name, title, email, linkedin, whatsapp, others):
     _others = others.strip()
     html = f"""
     <div class="digital-card">
-        <div class="title">{_name}</div>
-        <div class="subtitle">{_title}</div>
-        <div class="info-row"><span class="field-label">E-posta:</span> {f'<a href="mailto:{_email}">{_email}</a>' if _email else "-"}</div>
-        <div class="info-row"><span class="field-label">LinkedIn:</span> {f'<a href="{_linkedin}" target="_blank">{_linkedin}</a>' if _linkedin else "-"}</div>
-        <div class="info-row"><span class="field-label">WhatsApp:</span> {f'<a href="https://wa.me/{_whatsapp.lstrip("+").replace(" ","").replace("-","")}" target="_blank">{_whatsapp}</a>' if _whatsapp else "-"}</div>
-        <div class="info-row"><span class="field-label">Diğer:</span> {f'<a href="{_others}" target="_blank">{_others}</a>' if _others else "-"}</div>
+        <div class="card-top">
+            <div class="hilal-logo"><span>{HILAL_SVG}</span></div>
+            <div class="card-title">SANAL KARTVİZİT</div>
+        </div>
+        <div class="info-main">
+            <div class="big-name">{_name}</div>
+            <div class="big-title">{_title}</div>
+        </div>
+        <div class="infos">
+            <div class="info-row"><span class="field-label">E-posta:</span> {f'<a href="mailto:{_email}">{_email}</a>' if _email else "-"}</div>
+            <div class="info-row"><span class="field-label">LinkedIn:</span> {f'<a href="{_linkedin}" target="_blank">{_linkedin}</a>' if _linkedin else "-"}</div>
+            <div class="info-row"><span class="field-label">WhatsApp:</span> {f'<a href="https://wa.me/{_whatsapp.lstrip("+").replace(" ","").replace("-","")}" target="_blank">{_whatsapp}</a>' if _whatsapp else "-"}</div>
+            <div class="info-row"><span class="field-label">Diğer:</span> {f'<a href="{_others}" target="_blank">{_others}</a>' if _others else "-"}</div>
+        </div>
     </div>
     """
     return html
 
-# -- STYLES (always apply, because card is always shown)
+# -- STYLES
 st.markdown(f"""
 <style>
 html, body, [class*="css"] {{
@@ -41,28 +56,57 @@ html, body, [class*="css"] {{
 .digital-card {{
     background: {CARD_BG};
     border-radius: 28px;
-    padding: 2.5rem 2rem 2rem 2rem;
+    padding: 2.2rem 2rem 2.1rem 2rem;
     max-width: 430px;
     margin: 0 auto;
     border: 2.5px solid {HIGHLIGHT};
     color: #fff;
     box-shadow: 0 6px 26px rgba(47,47,47,0.16);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }}
-.digital-card .title {{
+.hilal-logo {{
+    margin-bottom: 0.3em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}}
+.card-title {{
     color: {HIGHLIGHT};
-    font-size: 2.1em;
+    letter-spacing: 0.16em;
+    font-family:'Montserrat','Segoe UI',Arial,sans-serif;
+    font-weight:900;
+    font-size: 1.45em;
+    margin-bottom: 1.1em;
+    text-align: center;
+}}
+.info-main {{
+    text-align: center;
+    width: 100%;
+    margin-bottom: 0.85em;
+}}
+.big-name {{
+    color: #fff;
+    font-size: 1.45em;
     font-weight: 800;
     font-family:'Montserrat','Helvetica Neue',Arial,sans-serif;
-    margin-bottom: 0.23em;
+    margin-bottom: 0.16em;
     word-break: break-all;
-    text-align:left;
+    text-align: center;
 }}
-.digital-card .subtitle {{
+.big-title {{
     color: #fff;
-    font-size: 1.18em;
-    margin-bottom: 1.1em;
+    font-size: 1.1em;
+    margin-bottom: 0.46em;
     font-weight: 500;
     font-family:'Montserrat','Segoe UI',Arial,sans-serif;
+    letter-spacing:.03em;
+    min-height:30px;
+}}
+.infos {{
+    width: 100%;
+    margin-top: 0.7em;
 }}
 .digital-card .field-label {{
     color: {HIGHLIGHT};
@@ -126,8 +170,9 @@ html, body, [class*="css"] {{
 }}
 @media (max-width: 720px) {{
     .digital-card {{padding: 1.1rem 0.5rem !important; max-width:98vw;}}
-    .digital-card .title {{font-size:1.25em;}}
+    .digital-card .title {{font-size:1em;}}
     .block-container {{padding-left:4px !important; padding-right:2px !important;}}
+    .info-main .big-name {{font-size:1.02em !important;}}
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -160,7 +205,7 @@ if "name" in query_params:
     whatsapp = query_params.get("whatsapp", "")
     others = query_params.get("others", "")
 
-    # Hide sidebar (Streamlit v1.23+: use option):
+    # Hide sidebar, centered layout
     st.set_page_config(layout="centered", initial_sidebar_state="collapsed")
     st.markdown(
         "<br><br>", unsafe_allow_html=True
