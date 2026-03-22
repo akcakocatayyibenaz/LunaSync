@@ -13,8 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import qrcode
 import streamlit as st
-from PIL import Image
-import urllib.parse
+from PIL import Image, ImageDraw, ImageFont
 
 # —— Tema renkleri (Koyu) ——
 DARK_BG = "#2F2F2F"
@@ -127,35 +126,7 @@ def cycle_day_from_last_period(last: date, cycle_len: int, today: date) -> int |
         return None
     return (delta % cycle_len) + 1
 
-def build_qr_url(day: int|None, pain: int, medications: list[str]) -> str:
-    """
-    QR kodu bir sayfaya yönlendirsin ve özet veriler URL parametrelerinde iletilsin.
-    Format: https://lunasync-web-ozet.com/ozet?gun=[int]&agr=[int]&ilaclar=[virgülle ayrılmış]
-    (Demo için localhost:8502/ozet ya da başka sabit endpoint olabilir!)
-    """
-    meds = ",".join(medications) if medications else ""
-    gun = f"{day}" if (day is not None and day != "") else ""
-    agr = f"{pain}" if pain else ""
-    # Demo/test için url: http://lunasync-qr.web.app/ozet veya localhost:8502/ozet
-    base = "https://lunasync-ozet.web.app/ozet"
-    params = {"gun": gun, "agr": agr, "ilaclar": meds}
-    url = base + "?" + urllib.parse.urlencode(params)
-    return url
-
-def parse_ozet_params(query_str: str) -> dict:
-    # Yardımcı: Parametreleri parse et
-    parsed = urllib.parse.parse_qs(query_str)
-    def get_first(k): return parsed[k][0] if k in parsed and parsed[k] else ""
-    ilaclar_value = get_first("ilaclar")
-    meds = ilaclar_value.split(",") if ilaclar_value.strip() else []
-    return {
-        "gun": get_first("gun"),
-        "agr": get_first("agr"),
-        "ilaclar": meds
-    }
-
 def phase_for_day(day: int, cycle_len: int) -> str:
-    # Faz sadece ekranda, QR'da yok!
     if day <= 5:
         return "Menstrual (Regl)"
     ovulation_approx = max(6, cycle_len - 14)
@@ -183,7 +154,6 @@ def build_payload(
     }
 
 def fig_doctor_summary(payload: dict) -> go.Figure:
-    # Koyu tema grafik
     pain = payload.get("pain_scale_1_10", 0)
     cday = payload.get("cycle_day")
     clen = payload.get("cycle_length_days", 28)
@@ -267,28 +237,33 @@ def fig_doctor_summary(payload: dict) -> go.Figure:
 def render_doctor_decode():
     st.subheader("Doktor görünümü")
     st.caption(
-        "QR koddan elde edilen kısa formatlı web bağlantısı (URL) kopyalayın veya parametreleri girin. "
-        "Ya da doğrudan QR ile tarayarak açılan özet sayfasını kullanın."
+        "QR koddan elde edilen düz metni girin. Alt kısımdan özet ve grafik göreceksiniz."
     )
 
-    url = st.text_input("Web bağlantısı (QR linki)", placeholder="https://lunasync-ozet.web.app/ozet?gun=13&agr=5&ilaclar=Parol,Apranax")
-    gun = st.text_input("Döngü günü", value="")
-    agr = st.text_input("Ağrı (1–10)", value="")
-    ilaclar = st.text_input("İlaçlar (virgülle)", value="")
+    raw = st.text_area(
+        "QR içeriği (düz metin, ör: LunaSync Özet - Gün: 12, Ağrı Seviyesi: 7, Kullanılan İlaçlar: Parol,Apranax)",
+        height=120,
+        placeholder="LunaSync Özet - Gün: 12, Ağrı Seviyesi: 7, Kullanılan İlaçlar: Parol,Apranax"
+    )
 
-    parsed = {"gun": "", "agr": "", "ilaclar": []}
-    if url and "?gun=" in url:
-        # parse from url
-        query_str = url.split("?", 1)[1]
-        parsed = parse_ozet_params(query_str)
-        gun, agr, ilaclar = parsed["gun"], parsed["agr"], ",".join(parsed["ilaclar"])
+    gun = ""
+    agr = ""
+    ilaclar = []
+    if raw.strip().startswith("LunaSync Özet"):
+        try:
+            parts = raw.split(" - ")[1].split(", ")
+            gun = parts[0].replace("Gün: ", "").strip()
+            agr = parts[1].replace("Ağrı Seviyesi: ", "").strip()
+            ilaclar_raw = parts[2].replace("Kullanılan İlaçlar: ", "").strip()
+            ilaclar = [x.strip() for x in ilaclar_raw.split(",") if x.strip()]
+        except Exception:
+            pass
 
     if st.button("Kısa özet göster", key="doc_parse"):
-        meds = [x.strip() for x in ilaclar.split(",") if x.strip()]
         rows = [
             {"Alan": "Döngü Günü", "Değer": gun or "-"},
             {"Alan": "Ağrı (1–10)", "Değer": agr or "-"},
-            {"Alan": "İlaçlar", "Değer": ", ".join(meds) if meds else "-"},
+            {"Alan": "İlaçlar", "Değer": ", ".join(ilaclar) if ilaclar else "-"},
         ]
         st.dataframe(pd.DataFrame(rows), use_container_width=False, width="stretch", hide_index=True)
         payload = {
@@ -297,7 +272,7 @@ def render_doctor_decode():
             "cycle_length_days": None,
             "last_period": None,
             "phase": "",
-            "medications": meds,
+            "medications": ilaclar,
         }
         st.plotly_chart(fig_doctor_summary(payload), use_container_width=False, width="stretch")
 
@@ -310,6 +285,8 @@ def main() -> None:
     )
     if "show_qr" not in st.session_state:
         st.session_state["show_qr"] = False
+    if "show_card" not in st.session_state:
+        st.session_state["show_card"] = False
     inject_css()
 
     st.markdown('<h2>LunaSync</h2>', unsafe_allow_html=True)
@@ -320,11 +297,11 @@ def main() -> None:
         st.markdown('<span class="luna-title-custom">Menü</span>', unsafe_allow_html=True)
         page = st.radio(
             "Sayfa",
-            ["Ana panel", "Doktor görünümü (QR okuma / web özet linki)"],
+            ["Ana panel", "Doktor görünümü (QR okuma / düz metin)"],
             label_visibility="collapsed",
         )
 
-    if page == "Doktor görünümü (QR okuma / web özet linki)":
+    if page == "Doktor görünümü (QR okuma / düz metin)":
         render_doctor_decode()
         return
 
@@ -396,14 +373,19 @@ def main() -> None:
         medications=medications,
     )
 
-    # QR URL oluştur
-    qr_url = build_qr_url(cday, int(pain), medications)
+    gün_txt = str(cday) if cday is not None else "-"
+    ağrı_txt = str(pain)
+    ilaclar_txt = ", ".join(medications) if medications else "-"
+    qr_data = f"LunaSync Özet - Gün: {gün_txt}, Ağrı Seviyesi: {ağrı_txt}, Kullanılan İlaçlar: {ilaclar_txt}"
 
     st.divider()
-    c1, c2 = st.columns([1, 1])
+    c1, c2, c3 = st.columns([1, 1, 1])
+
     with c1:
         if st.button("Verileri QR koda dönüştür"):
             st.session_state["show_qr"] = True
+        if st.button("Görsel kart oluştur"):
+            st.session_state["show_card"] = True
     with c2:
         st.download_button(
             label="Özet grafiği indir (HTML)",
@@ -414,29 +396,27 @@ def main() -> None:
         )
 
     if st.session_state.get("show_qr"):
-        # QR kodu yüksek kontrast (siyah-beyaz) ve link olarak!
         qr = qrcode.QRCode(
             version=None,
             box_size=8,
             border=2,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
         )
-        qr.add_data(qr_url)
+        qr.add_data(qr_data)
         qr.make(fit=True)
-        # High contrast: black and white
         img = qr.make_image(fill_color="black", back_color="white").convert("1")
         buf = BytesIO()
         img.save(buf, format="PNG")
         png_bytes = buf.getvalue()
         st.image(
             Image.open(BytesIO(png_bytes)),
-            caption=f"QR kodu taratın: açılan web sayfasında özet göreceksiniz.",
+            caption=f"QR kodunu okutun. İçeriği sadece kısa özet metnidir. Tarayıcıya göndermez.",
             width=292,
         )
         st.markdown(
-            f'<span style="color:{WHITE};font-size:0.95rem;">'
-            f'İpucu: Kameradan okuttuğunuzda açılan sayfa özeti gösterecek.<br>'
-            f'<small>Bağlantı:</small> <code style="color:#fff;background:#333;padding:3px 5px;border-radius:7px;">{qr_url}</code>'
+            f'<span style="color:{WHITE};font-size:0.97rem;">'
+            f'İçerik:<br>'
+            f'<code style="color:#fff;background:#333;padding:3px 5px;border-radius:7px;">{qr_data}</code>'
             '</span>', unsafe_allow_html=True
         )
         st.download_button(
@@ -449,8 +429,26 @@ def main() -> None:
         preview_fig = fig_doctor_summary(payload)
         st.plotly_chart(preview_fig, use_container_width=False, width="stretch")
 
+    if st.session_state.get("show_card"):
+        card_img = create_summary_card(
+            gun=gün_txt, ağrı=ağrı_txt, ilaçlar=medications
+        )
+        buf = BytesIO()
+        card_img.save(buf, format="PNG")
+        card_bytes = buf.getvalue()
+        st.image(
+            Image.open(BytesIO(card_bytes)),
+            caption="Görsel klinik özet kartı. Galerinize kaydedebilirsiniz.",
+            use_column_width=True,
+        )
+        st.download_button(
+            "Klinik özet kartını indir (PNG)",
+            data=card_bytes,
+            file_name=f"lunasync_kart_gun{gün_txt}.png",
+            mime="image/png",
+        )
+
 def _build_standalone_html(payload: dict) -> bytes:
-    """Mini rapor karanlık tema ile (Plotly CDN)."""
     fig = fig_doctor_summary(payload)
     fig_json = fig.to_json()
     table_html = pd.DataFrame(
@@ -488,6 +486,54 @@ Plotly.newPlot('g', fig.data, fig.layout, {{responsive:true}});
 </body>
 </html>"""
     return html.encode("utf-8")
+
+def create_summary_card(gun: str, ağrı: str, ilaçlar: list[str]) -> Image.Image:
+    """Görsel klinik özet kartı hazırla: Gün, ağrı seviyesi, termometre ikonu, ilaçlar liste olarak."""
+    # Görsel boyut ve renkler
+    W, H = 550, 330
+    BG = (47, 47, 47)
+    HEAD = DUST_PINK
+    FONTCOLOR = WHITE
+    try:
+        font_bold = ImageFont.truetype("arialbd.ttf", 36)
+        font_bold_big = ImageFont.truetype("arialbd.ttf", 54)
+        font = ImageFont.truetype("arial.ttf", 26)
+        font_small = ImageFont.truetype("arial.ttf", 20)
+        font_semi = ImageFont.truetype("arial.ttf", 23)
+    except:
+        font_bold = ImageFont.load_default()
+        font_bold_big = ImageFont.load_default()
+        font = ImageFont.load_default()
+        font_semi = ImageFont.load_default()
+        font_small = ImageFont.load_default()
+
+    img = Image.new("RGB", (W, H), BG)
+    d = ImageDraw.Draw(img)
+
+    # Başlık
+    d.text((W//2, 33), "LunaSync Özet", anchor="mm", fill=HEAD, font=font_bold)
+    # Döngü Günü
+    d.text((56, 82), "Döngü Günü:", anchor="lm", fill=FONTCOLOR, font=font)
+    d.text((210, 82), f"{gun}", anchor="mm", fill=FONTCOLOR, font=font_bold_big)
+    # Ağrı seviyesi ve termometre simgesi
+    d.text((56, 142), "Ağrı Seviyesi:", anchor="lm", fill=FONTCOLOR, font=font)
+    # Termometre (emoji) + değer
+    thermometer = "\U0001F321"
+    thermometer_color = (248,200,220)
+    # Termometre değer yanına, emoji yoksa görsel çizmeyebilir; metinle göster.
+    d.text((56, 170), f"{thermometer} {ağrı}/10", anchor="lm", fill=thermometer_color, font=font_semi)
+
+    # İlaçlar başlık
+    d.text((56, 215), "Kullanılan İlaçlar:", anchor="lm", fill=FONTCOLOR, font=font)
+    ilac_str = ilaçlar if ilaçlar else ["-"]
+    y_start = 250
+    for idx, ilac in enumerate(ilac_str):
+        d.text((72, y_start + idx*29), f"- {ilac}", anchor="lm", fill=FONTCOLOR, font=font_small)
+
+    # Alt bilgi
+    d.text((W-24, H-16), "LunaSync • kadin sağlığı kliniği özet kartı", fill=HEAD, font=font_small, anchor="rd")
+
+    return img
 
 if __name__ == "__main__":
     main()
